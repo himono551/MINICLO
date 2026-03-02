@@ -17,7 +17,6 @@ temp/
 *.tmp
 
 # Project assets
-assets/
 
 # Node
 node_modules/
