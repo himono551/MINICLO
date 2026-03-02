@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sheet Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>Sheet Capture</h1>
+
+      <label>
+        Apps Script URL
+        <input id="scriptUrl" type="url" placeholder="https://script.google.com/.../exec" />
+      </label>
+
+      <div class="row two">
+        <label>
+          name
+          <input id="name" type="text" />
+        </label>
+        <label>
+          brand
+          <input id="brand" type="text" />
+        </label>
+      </div>
+
+      <div class="row two">
+        <label>
+          type
+          <input id="type" type="text" />
+        </label>
+        <label>
+          category
+          <input id="category" type="text" />
+        </label>
+      </div>
+
+      <div class="row two">
+        <label>
+          tag (category2)
+          <input id="category2" type="text" />
+        </label>
+        <label>
+          color
+          <input id="color" type="text" />
+        </label>
+      </div>
+
+      <div class="row two">
+        <label>
+          purchase_date
+          <input id="purchase_date" type="date" />
+        </label>
+        <label>
+          price
+          <input id="price" type="number" min="0" step="1" />
+        </label>
+      </div>
+
+      <label>
+        url
+        <input id="url" type="url" />
+      </label>
+      <label>
+        image_url
+        <input id="image_url" type="url" />
+      </label>
+      <label>
+        site
+        <input id="site" type="text" />
+      </label>
+      <label>
+        memo
+        <textarea id="memo" rows="2"></textarea>
+      </label>
+      <label>
+        raw_text
+        <textarea id="raw_text" rows="2"></textarea>
+      </label>
+
+      <div class="actions">
+        <button id="extractBtn" type="button" class="secondary">現在ページから抽出</button>
+        <button id="saveBtn" type="button">Save to Sheet</button>
+      </div>
+
+      <p id="status" class="status"></p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime / temp
+tmp/
+temp/
+*.tmp
+
+# Project assets
+assets/
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc

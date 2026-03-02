@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MiniClo - Soft Minimalism Inventory</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar panel">
+      <button id="sidebarMenuToggle" class="sidebar-menu-toggle" type="button" aria-label="メニューを開閉" aria-expanded="false">☰</button>
+      <h1>MiniClo</h1>
+      <p>持ちすぎを防ぐ、意思決定インベントリ</p>
+      <nav class="side-nav" aria-label="画面切替">
+        <button class="nav-btn active" data-tab="dashboard"><img class="btn-icon" src="./assets/icons/interface/icons8-graph-50.png" alt="" aria-hidden="true" />ダッシュボード</button>
+        <button class="nav-btn" data-tab="inventory"><img class="btn-icon" src="./assets/icons/interface/icons8-storage-50.png" alt="" aria-hidden="true" />在庫</button>
+        <div class="sub-nav" aria-label="在庫絞り込み">
+          <button class="sub-nav-btn" data-scope="clothes"><img class="btn-icon sm" src="./assets/icons/clothes/icons8-t-shirt-1-50.png" alt="" aria-hidden="true" />衣服</button>
+          <button class="sub-nav-btn" data-scope="cosmetics"><img class="btn-icon sm" src="./assets/icons/cosme/icons8-lipstick-50.png" alt="" aria-hidden="true" />コスメ</button>
+          <button class="sub-nav-btn" data-scope="gadgets"><img class="btn-icon sm" src="./assets/icons/interface/icons8-gear-50.png" alt="" aria-hidden="true" />ガジェット</button>
+          <button class="sub-nav-btn" data-scope="uncategorized"><img class="btn-icon sm" src="./assets/icons/interface/icons8-apps-50.png" alt="" aria-hidden="true" />未分類</button>
+        </div>
+        <button class="nav-btn" data-tab="ocr"><img class="btn-icon" src="./assets/icons/interface/icons8-picture-120.png" alt="" aria-hidden="true" />OCR取込</button>
+        <button class="nav-btn" data-tab="wishlist"><img class="btn-icon" src="./assets/icons/interface/icons8-favorite-50.png" alt="" aria-hidden="true" />ウィッシュリスト</button>
+        <button class="nav-btn" data-tab="log"><img class="btn-icon" src="./assets/icons/interface/icons8-list-50.png" alt="" aria-hidden="true" />行動ログ</button>
+        <button class="nav-btn" data-tab="trash"><img class="btn-icon" src="./assets/icons/interface/icons8-trash-can-50.png" alt="" aria-hidden="true" />ゴミ箱</button>
+      </nav>
+    </aside>
+
+    <main class="main-area">
+      <section class="panel top-bar">
+        <div class="month-tools">
+          <label for="monthPicker">対象月</label>
+          <input id="monthPicker" type="month" />
+        </div>
+        <div class="budget-tools">
+          <label for="budgetInput">月予算</label>
+          <input id="budgetInput" type="number" min="0" step="1" placeholder="未設定" />
+        </div>
+        <div class="sync-tools">
+          <label for="scriptUrlInput">Apps Script URL</label>
+          <input id="scriptUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+          <button id="syncLoadBtn" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-download-50.png" alt="" aria-hidden="true" />シートから取得</button>
+          <button id="syncSaveBtn" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-upload-50.png" alt="" aria-hidden="true" />シートへ保存</button>
+          <span id="syncStatus" class="sync-status">ローカル保存モード</span>
+        </div>
+      </section>
+
+      <section class="panel tab-panel active" data-panel="dashboard">
+        <h2>サマリー</h2>
+        <div id="dashboardCards" class="fraction-grid"></div>
+
+        <h3>カテゴリ設定</h3>
+        <div id="categoryListWrap" class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>並び替え</th>
+                <th>カテゴリ</th>
+                <th>タイプ</th>
+                <th>上限</th>
+                <th>理想</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="categoryRows"></tbody>
+          </table>
+        </div>
+
+        <form id="categoryForm" class="inline-form">
+          <input name="name" type="text" placeholder="新規カテゴリ名" required />
+          <select name="type" aria-label="タイプ">
+            <option value="衣服">衣服</option>
+            <option value="コスメ">コスメ</option>
+            <option value="ガジェット">ガジェット</option>
+            <option value="未分類">未分類</option>
+          </select>
+          <input name="limit" type="number" min="0" placeholder="上限(任意)" />
+          <input name="ideal" type="number" min="0" placeholder="理想(任意)" />
+          <button type="submit" class="action-btn primary"><img class="btn-icon sm invert" src="./assets/icons/interface/icons8-add-50.png" alt="" aria-hidden="true" />カテゴリ追加</button>
+        </form>
+      </section>
+
+      <section class="panel tab-panel" data-panel="inventory">
+        <div class="section-head">
+          <h2 id="inventorySectionTitle">在庫</h2>
+          <div class="inventory-actions">
+            <button id="inventoryFieldsToggle" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-tune-50.png" alt="" aria-hidden="true" />カスタマイズ</button>
+            <button id="inventorySortToggle" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-available-updates-50.png" alt="" aria-hidden="true" />並び替え</button>
+            <button id="inventoryAddOpen" class="action-btn primary" type="button"><img class="btn-icon sm invert" src="./assets/icons/interface/icons8-add-50.png" alt="" aria-hidden="true" />新規追加</button>
+            <button id="inventoryViewToggle" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-four-squares-50.png" alt="" aria-hidden="true" />ギャラリー</button>
+          </div>
+        </div>
+
+        <div id="inventoryFieldsPanel" class="fields-panel" hidden>
+          <div class="fields-head">
+            <p>表示項目</p>
+            <div class="fit-toggle">
+              <button class="action-btn ghost" type="button" data-fit-mode="cover"><img class="btn-icon sm" src="./assets/icons/interface/icons8-adjust-50.png" alt="" aria-hidden="true" />トリミング</button>
+              <button class="action-btn ghost" type="button" data-fit-mode="fit"><img class="btn-icon sm" src="./assets/icons/interface/icons8-wallpaper-50.png" alt="" aria-hidden="true" />全体</button>
+            </div>
+          </div>
+          <div id="inventoryFieldsList" class="fields-list"></div>
+          <div class="fields-add">
+            <input id="inventoryFieldAddLabel" type="text" placeholder="項目名（表示）" />
+            <input id="inventoryFieldAddKey" type="text" placeholder="キー（任意）" />
+            <button id="inventoryFieldAddBtn" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-add-50.png" alt="" aria-hidden="true" />項目追加</button>
+          </div>
+        </div>
+
+        <div id="inventorySortPanel" class="sort-panel" hidden>
+          <div class="fields-head">
+            <p>並び替え条件</p>
+            <span class="sync-status">並び順を複数指定できます</span>
+          </div>
+          <div id="inventorySortRows" class="sort-rows"></div>
+          <div class="sort-actions">
+            <button id="inventorySortAddRule" class="action-btn ghost" type="button">+ 条件を追加</button>
+          </div>
+          <label class="sort-auto">
+            <input id="inventorySortAuto" type="checkbox" />
+            <span>自動で並び替える</span>
+          </label>
+        </div>
+
+        <div id="inventoryCategoryTabs" class="category-tabs" role="tablist" aria-label="カテゴリ絞り込み"></div>
+
+        <div id="inventoryListWrap" class="table-wrap">
+          <table>
+            <thead>
+              <tr id="inventoryHeadRow"></tr>
+            </thead>
+            <tbody id="inventoryRows"></tbody>
+          </table>
+        </div>
+
+        <div id="inventoryGallery" class="gallery-grid" hidden></div>
+      </section>
+
+      <section class="panel tab-panel" data-panel="ocr">
+        <h2>OCR取込</h2>
+        <div class="ocr-layout">
+          <div class="ocr-pane">
+            <label>対象サイト
+              <select id="ocrSourceHint" class="cell-input">
+                <option value="auto">自動判定</option>
+                <option value="amazon">Amazon</option>
+                <option value="qoo10">Qoo10</option>
+                <option value="unknown">その他</option>
+              </select>
+            </label>
+            <label>スクリーンショット
+              <input id="ocrImageInput" type="file" accept="image/*" class="cell-input" />
+            </label>
+            <div class="ocr-actions">
+              <button id="ocrRunBtn" class="action-btn primary" type="button">OCR実行</button>
+              <button id="ocrParseBtn" class="action-btn ghost" type="button">テキスト再解析</button>
+              <button id="ocrSaveBtn" class="action-btn ghost" type="button">シートに登録</button>
+            </div>
+            <p id="ocrStatusText" class="sync-status">画像を選択してください</p>
+            <img id="ocrPreviewImage" class="ocr-preview" alt="ocr preview" />
+          </div>
+          <div class="ocr-pane">
+            <label>OCR全文
+              <textarea id="ocrRawText" class="cell-input ocr-textarea" placeholder="OCR結果がここに表示されます"></textarea>
+            </label>
+            <h3>抽出結果確認</h3>
+            <div class="ocr-confirm">
+              <div class="ocr-order-grid">
+                <label>注文日<input id="ocrOrderDate" type="date" class="cell-input" /></label>
+                <label>注文ID<input id="ocrOrderId" type="text" class="cell-input" /></label>
+                <label>注文合計<input id="ocrOrderTotal" type="number" min="0" class="cell-input" /></label>
+                <label>支払方法<input id="ocrOrderPayment" type="text" class="cell-input" /></label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>商品名</th>
+                      <th>大カテゴリ</th>
+                      <th>小カテゴリ</th>
+                      <th>ブランド</th>
+                      <th>状態</th>
+                      <th>数量</th>
+                      <th>単価</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ocrItemRows"></tbody>
+                </table>
+              </div>
+              <button id="ocrAddItemBtn" class="action-btn ghost" type="button">+ 商品行を追加</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel tab-panel" data-panel="wishlist">
+        <h2>ウィッシュリスト</h2>
+        <form id="wishlistForm" class="inline-form">
+          <input name="name" type="text" placeholder="欲しいもの" required />
+          <select name="category" id="wishlistCategorySelect"></select>
+          <input name="price" type="number" min="0" step="1" placeholder="価格(任意)" />
+          <select name="priority">
+            <option value="1">Priority 1</option>
+            <option value="2" selected>Priority 2</option>
+            <option value="3">Priority 3</option>
+          </select>
+          <input name="needBy" type="date" />
+          <button type="submit" class="action-btn primary">追加</button>
+        </form>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名前</th>
+                <th>カテゴリ</th>
+                <th>価格</th>
+                <th>判定</th>
+                <th>候補重複</th>
+                <th>状態</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="wishlistRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel tab-panel" data-panel="log">
+        <h2>行動ログ</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>日付</th>
+                <th>種別</th>
+                <th>カテゴリ</th>
+                <th>名前</th>
+                <th>数量</th>
+                <th>金額</th>
+              </tr>
+            </thead>
+            <tbody id="eventRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel tab-panel" data-panel="trash">
+        <div class="section-head">
+          <h2>ゴミ箱</h2>
+          <button id="trashPurgeAllBtn" class="action-btn ghost" type="button">全件完全削除</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名前</th>
+                <th>カテゴリ</th>
+                <th>削除日時</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="trashRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="inventoryAddModal" class="modal" hidden>
+    <div id="inventoryAddModalBackdrop" class="modal-backdrop"></div>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="inventoryAddModalTitle">
+      <h3 id="inventoryAddModalTitle">新規アイテム追加</h3>
+      <form id="inventoryForm" class="modal-grid">
+        <label>名前<input name="name" type="text" class="cell-input" placeholder="アイテム名" required /></label>
+        <label>カテゴリ<select name="category" id="inventoryCategorySelect" class="cell-input"></select></label>
+        <label>ブランド<input name="brand" type="text" class="cell-input" placeholder="ブランド" /></label>
+        <label>状態<input name="status" type="text" class="cell-input" placeholder="状態" /></label>
+        <label>お気に入り<input name="fav" type="text" class="cell-input" placeholder="お気に入り" /></label>
+        <label>色<input name="color" type="text" class="cell-input" placeholder="色" /></label>
+        <label>季節<input name="season" type="text" class="cell-input" placeholder="季節" /></label>
+        <label>タグ<input name="tag" type="text" class="cell-input" placeholder="タグ" /></label>
+        <label>残量<input name="remaining" type="number" min="0" class="cell-input" placeholder="残量" /></label>
+        <label>購入日<input name="purchase_date" type="date" class="cell-input" /></label>
+        <label>価格<input name="price" type="number" min="0" class="cell-input" placeholder="価格" /></label>
+        <label>容量<input name="capacity" type="text" class="cell-input" placeholder="容量" /></label>
+        <label>URL<input name="url" type="url" class="cell-input" placeholder="https://..." /></label>
+        <label>数量<input name="qty" type="number" min="1" value="1" class="cell-input" /></label>
+        <label>画像URL<input name="imageUrl" type="url" class="cell-input" placeholder="画像URL (任意)" /></label>
+        <label>画像ファイル<input name="imageFile" type="file" accept="image/*" class="cell-input" /></label>
+        <div class="modal-actions">
+          <button id="inventoryAddModalCancel" class="action-btn ghost" type="button">キャンセル</button>
+          <button type="submit" class="action-btn primary">追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="inventoryModal" class="modal" hidden>
+    <div id="inventoryModalBackdrop" class="modal-backdrop"></div>
+    <div class="modal-panel inventory-modal-panel" role="dialog" aria-modal="true" aria-label="アイテム編集">
+      <div class="inventory-modal-header">
+        <div class="inventory-modal-nav">
+          <button id="inventoryModalPrev" class="icon-btn ghost" type="button" title="前のアイテム" aria-label="前のアイテム">
+            <img src="./assets/icons/interface/icons8-矢印の縮小-50.png" alt="" aria-hidden="true" />
+          </button>
+          <button id="inventoryModalNext" class="icon-btn ghost" type="button" title="次のアイテム" aria-label="次のアイテム">
+            <img src="./assets/icons/interface/icons8-矢印を展開-50.png" alt="" aria-hidden="true" />
+          </button>
+        </div>
+        <div class="inventory-modal-header-actions">
+          <button id="inventoryModalDuplicate" class="action-btn ghost" type="button" title="複製" aria-label="複製">複製</button>
+          <button id="inventoryModalDelete" class="icon-btn ghost danger" type="button" title="削除（ゴミ箱へ移動）" aria-label="削除（ゴミ箱へ移動）">
+            <img src="./assets/icons/interface/icons8-trash-can-50.png" alt="" aria-hidden="true" />
+          </button>
+          <button id="inventoryModalClose" class="icon-btn ghost" type="button" title="閉じる" aria-label="閉じる">×</button>
+        </div>
+      </div>
+      <div class="inventory-modal-body">
+        <div class="modal-grid">
+          <label class="modal-name-field">名前<input id="modalName" type="text" class="cell-input" /></label>
+          <label>ブランド<input id="modalBrand" type="text" class="cell-input" /></label>
+          <label>タイプ
+            <select id="modalType" class="cell-input">
+              <option value="衣服">衣服</option>
+              <option value="コスメ">コスメ</option>
+              <option value="ガジェット">ガジェット</option>
+              <option value="未分類">未分類</option>
+            </select>
+          </label>
+          <label>カテゴリ<select id="modalCategory" class="cell-input"></select></label>
+          <label>タグ<input id="modalTag" type="text" class="cell-input" /></label>
+          <label>状態<input id="modalStatus" type="text" class="cell-input" /></label>
+          <label>お気に入り<input id="modalFav" type="text" class="cell-input" /></label>
+          <label>色<input id="modalColor" type="text" class="cell-input" /></label>
+          <label>季節<input id="modalSeason" type="text" class="cell-input" /></label>
+          <label>残量<input id="modalRemaining" type="number" min="0" class="cell-input" /></label>
+          <label>購入日<input id="modalPurchaseDate" type="date" class="cell-input" /></label>
+          <label>価格<input id="modalPrice" type="number" min="0" class="cell-input" /></label>
+          <label>容量<input id="modalCapacity" type="text" class="cell-input" /></label>
+          <label class="modal-url-field">URL
+            <div class="modal-url-row">
+              <input id="modalUrl" type="url" class="cell-input" />
+              <button id="modalUrlOpenBtn" type="button" class="action-btn ghost">開く</button>
+            </div>
+          </label>
+          <label>数量<input id="modalQty" type="number" min="1" class="cell-input" /></label>
+          <label>画像URL<input id="modalImageUrl" type="url" class="cell-input" placeholder="https://..." /></label>
+          <label>画像ファイル<input id="modalImageFile" type="file" accept="image/*" class="cell-input" /></label>
+        </div>
+        <div class="modal-preview">
+          <img id="modalImagePreview" class="gallery-image" alt="preview" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
