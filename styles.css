@@ -760,8 +760,9 @@ select {
   line-height: 1.35;
   min-height: calc(1.35em * 2);
   overflow: hidden;
+  line-clamp: 3;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   text-overflow: ellipsis;
 }
