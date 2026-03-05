@@ -1519,14 +1519,31 @@ function syncFingerprint_(data) {
   }
 }
 
+let syncSaveQueue_ = [];
+let syncSaveInFlight_ = false;
+let syncSaveRetryTimerId_ = null;
+let syncSaveHadFailure_ = false;
+
 function updateSyncSaveButtonState_() {
   const btn = document.getElementById("syncSaveBtn");
   if (!btn) return;
   const baseline = String(state.ui.lastSavedDataFingerprint || "");
   const current = syncFingerprint_(exportSyncData());
   const dirty = baseline !== "" && current !== baseline;
+  const pending = syncSaveInFlight_ || syncSaveQueue_.length > 0;
+  const failed = syncSaveHadFailure_;
   btn.classList.toggle("attention", dirty);
-  btn.title = dirty ? "未保存の変更があります" : "";
+  btn.classList.toggle("pending", pending);
+  btn.classList.toggle("failed", failed);
+  if (failed) {
+    btn.title = "保存失敗。自動再試行中です";
+  } else if (pending) {
+    btn.title = "保存をバックグラウンドで同期中です";
+  } else if (dirty) {
+    btn.title = "未保存の変更があります";
+  } else {
+    btn.title = "";
+  }
 }
 
 function notifySheetUpdated_(message) {
@@ -1589,6 +1606,13 @@ async function syncLoadFromAppsScript(options = {}) {
     importSyncData(data);
     if (incomingFingerprint) state.ui.lastLoadedFingerprint = incomingFingerprint;
     state.ui.lastSavedDataFingerprint = incomingFingerprint || syncFingerprint_(exportSyncData());
+    syncSaveQueue_ = [];
+    syncSaveInFlight_ = false;
+    syncSaveHadFailure_ = false;
+    if (syncSaveRetryTimerId_) {
+      clearTimeout(syncSaveRetryTimerId_);
+      syncSaveRetryTimerId_ = null;
+    }
     persist();
     if (!silent) setSyncStatus(`取得完了 ${new Date().toLocaleTimeString("ja-JP")}`);
     if (fromAuto && hasChanged) {
@@ -1606,42 +1630,77 @@ async function syncLoadFromAppsScript(options = {}) {
   }
 }
 
-async function syncSaveToAppsScript() {
+function clearSyncRetryTimer_() {
+  if (!syncSaveRetryTimerId_) return;
+  clearTimeout(syncSaveRetryTimerId_);
+  syncSaveRetryTimerId_ = null;
+}
+
+async function sendSyncSaveRequest_(url, payload) {
+  const res = await withTimeout(
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+    }),
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const responsePayload = await res.json().catch(() => null);
+  if (responsePayload && responsePayload.ok === false) {
+    throw new Error(responsePayload.error || "Apps Scriptが保存エラーを返しました");
+  }
+}
+
+function enqueueSyncSave_(job) {
+  const duplicated = syncSaveQueue_.some((queued) => queued.fingerprint === job.fingerprint);
+  if (!duplicated) syncSaveQueue_.push(job);
+  if (syncSaveQueue_.length > 1) {
+    if (syncSaveInFlight_) {
+      syncSaveQueue_ = [syncSaveQueue_[0], syncSaveQueue_[syncSaveQueue_.length - 1]];
+    } else {
+      syncSaveQueue_ = [syncSaveQueue_[syncSaveQueue_.length - 1]];
+    }
+  }
+}
+
+function scheduleSyncSaveRetry_(delayMs = 3000) {
+  clearSyncRetryTimer_();
+  syncSaveRetryTimerId_ = setTimeout(() => {
+    syncSaveRetryTimerId_ = null;
+    void processSyncSaveQueue_();
+  }, delayMs);
+}
+
+async function processSyncSaveQueue_() {
+  if (syncSaveInFlight_) return;
+  const next = syncSaveQueue_[0];
+  if (!next) {
+    updateSyncSaveButtonState_();
+    return;
+  }
   const url = (state.ui.scriptUrl || "").trim();
   if (!url) {
-    alert("Apps Script URL を入力してください。");
+    syncSaveHadFailure_ = true;
+    setSyncStatus("保存失敗（URL未設定）");
+    updateSyncSaveButtonState_();
     return;
   }
 
-  setSyncStatus("シートへ保存中...");
-
+  syncSaveInFlight_ = true;
+  updateSyncSaveButtonState_();
   try {
-    const payload = {
-      action: "save",
-      data: exportSyncData(),
-      meta: { savedAt: new Date().toISOString() },
-    };
-
-    const res = await withTimeout(
-      fetch(url, {
-        method: "POST",
-        // Apps Script WebApp + file origin では JSON だとCORS preflightで失敗しやすい
-        // text/plain にして simple request として送る
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload),
-      }),
-    );
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const responsePayload = await res.json().catch(() => null);
-    if (responsePayload && responsePayload.ok === false) {
-      throw new Error(responsePayload.error || "Apps Scriptが保存エラーを返しました");
-    }
-    state.ui.lastSavedDataFingerprint = syncFingerprint_(exportSyncData());
-    persist();
+    await sendSyncSaveRequest_(url, next.payload);
+    syncSaveQueue_.shift();
+    syncSaveHadFailure_ = false;
+    clearSyncRetryTimer_();
     setSyncStatus(`保存完了 ${new Date().toLocaleTimeString("ja-JP")}`);
+    updateSyncSaveButtonState_();
+    syncSaveInFlight_ = false;
+    if (syncSaveQueue_.length > 0) {
+      void processSyncSaveQueue_();
+    }
+    return;
   } catch (error) {
-    // CORS制約下ではレスポンス読取に失敗することがあるため no-cors で再試行
     if (error instanceof TypeError) {
       try {
         await withTimeout(
@@ -1649,25 +1708,57 @@ async function syncSaveToAppsScript() {
             method: "POST",
             mode: "no-cors",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({
-              action: "save",
-              data: exportSyncData(),
-              meta: { savedAt: new Date().toISOString() },
-            }),
+            body: JSON.stringify(next.payload),
           }),
         );
-        state.ui.lastSavedDataFingerprint = syncFingerprint_(exportSyncData());
-        persist();
+        syncSaveQueue_.shift();
+        syncSaveHadFailure_ = false;
+        clearSyncRetryTimer_();
         setSyncStatus(`保存送信完了 ${new Date().toLocaleTimeString("ja-JP")}`);
+        updateSyncSaveButtonState_();
+        syncSaveInFlight_ = false;
+        if (syncSaveQueue_.length > 0) {
+          void processSyncSaveQueue_();
+        }
         return;
       } catch (_) {
         // fall through
       }
     }
-
-    setSyncStatus("保存失敗");
-    alert(`シート保存に失敗しました: ${error.message}`);
+    syncSaveHadFailure_ = true;
+    const attempt = Number(next.attempt || 0) + 1;
+    next.attempt = attempt;
+    const retrySec = Math.min(60, Math.max(3, 3 * attempt));
+    setSyncStatus(`保存失敗（${retrySec}秒後に再試行）`);
+    scheduleSyncSaveRetry_(retrySec * 1000);
+    updateSyncSaveButtonState_();
+  } finally {
+    syncSaveInFlight_ = false;
   }
+}
+
+async function syncSaveToAppsScript() {
+  const url = (state.ui.scriptUrl || "").trim();
+  if (!url) {
+    alert("Apps Script URL を入力してください。");
+    return;
+  }
+
+  const dataSnapshot = exportSyncData();
+  const fingerprint = syncFingerprint_(dataSnapshot);
+  const payload = {
+    action: "save",
+    data: dataSnapshot,
+    meta: { savedAt: new Date().toISOString() },
+  };
+  enqueueSyncSave_({ fingerprint, payload, attempt: 0 });
+  state.ui.lastSavedDataFingerprint = fingerprint;
+  syncSaveHadFailure_ = false;
+  persist();
+  setSyncStatus(`保存予定 ${new Date().toLocaleTimeString("ja-JP")}（同期中）`);
+  updateSyncSaveButtonState_();
+  clearSyncRetryTimer_();
+  await processSyncSaveQueue_();
 }
 
 function upsertInventoryOnBuy(wishlistItem) {
