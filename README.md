@@ -54,6 +54,12 @@ Apps Scriptの設定手順は以下を参照してください。
 - 使い方: `chrome-extension/sheets-capture/README.md`
 - アイコン押下で独立ウィンドウを開く仕様のため、タブ移動しても入力内容は保持されます。
 
+## OCRベータ（任意）
+
+- ベータ版: `beta-ocr`
+- 使い方: `beta-ocr/README.md`
+- 本体から切り離した実験用OCR画面です（本体データとは独立）。
+
 ## GitHub公開の最小手順
 
 ```bash
@@ -71,7 +77,9 @@ git push -u origin main
 - `index.html`: 画面レイアウト
 - `styles.css`: スタイル定義
 - `app.js`: 状態管理、描画、イベント処理、同期処理
-- `apps-script/Code.gs`: スプレッドシート連携用スクリプト
+- `beta-ocr/`: OCR取り込みのベータ機能（独立ミニアプリ）
+- `apps-script/app-sync/Code.gs`: アプリ同期用スクリプト
+- `apps-script/capture/Code.gs`: 拡張機能・iOSショートカット捕捉用スクリプト
 - `apps-script/README.md`: Apps Scriptデプロイ手順
 - `chrome-extension/sheets-capture`: 商品ページ情報を手動保存するChrome拡張
 - `assets/csv/`: 初期検証用CSVデータ

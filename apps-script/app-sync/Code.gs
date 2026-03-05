@@ -135,7 +135,7 @@ const WISHLIST_STATUSES = ['wish', 'approved', 'hold', 'dropped', 'bought'];
 // 既存の手入力シートにも保存結果を反映する
 const WRITE_BACK_LEGACY_SHEET = true;
 // 必要なら対象スプレッドシートIDを固定する（通常は空推奨）
-const TARGET_SPREADSHEET_ID = '';
+const TARGET_SPREADSHEET_ID = '1dAhsc6reDgVQnF5KyVybugJCIYhnXi051KH7D8TesjU';
 
 function doGet(e) {
   const action = e && e.parameter ? e.parameter.action : '';
@@ -187,46 +187,15 @@ function doPost(e) {
       || ''
     ).trim();
 
-    // form-data / x-www-form-urlencoded を受けたときの値参照
-    function pick_(key) {
-      if (body[key] !== undefined && body[key] !== null && String(body[key]).trim() !== '') return body[key];
-      if (params[key] !== undefined && params[key] !== null && String(params[key]).trim() !== '') return params[key];
-      if (paramList[key] && paramList[key].length) return paramList[key][0];
-      return '';
-    }
-
     if (action === 'save') {
-      // アプリ本体の全体保存: { action: "save", data: {...} }
-      if (body.data && typeof body.data === 'object') {
-        saveData_(body.data || {});
-        return jsonOutput({ ok: true });
-      }
-
-      // iOSショートカット互換: { action: "save", name, brand, url, ... }
-      const shortcutPayload = {
-        name: String(pick_('name') || '').trim(),
-        brand: String(pick_('brand') || '').trim(),
-        type: String(pick_('type') || '').trim() || '未分類',
-        category: String(pick_('category') || '').trim() || '未分類',
-        category2: String(pick_('category2') || pick_('tag') || '').trim(),
-        status: String(pick_('status') || '').trim(),
-        color: String(pick_('color') || '').trim(),
-        purchase_date: String(pick_('purchase_date') || '').trim(),
-        price: pick_('price'),
-        url: String(pick_('url') || '').trim(),
-        image_url: String(pick_('image_url') || '').trim(),
-        site: String(pick_('site') || '').trim(),
-        memo: String(pick_('memo') || '').trim(),
-        raw_text: String(pick_('raw_text') || '').trim(),
-      };
-      if (!shortcutPayload.name) {
+      if (!body.data || typeof body.data !== 'object') {
         return jsonOutput({
           ok: false,
-          error: 'Missing name for save shortcut payload. Use { action:\"save\", data:{...} } for full save or include name.'
+          error: 'app-sync save requires JSON body: { action:\"save\", data:{...} }'
         });
       }
-      const appended = appendManualItem_(shortcutPayload);
-      return jsonOutput({ ok: true, appended: appended, mode: 'shortcut_save' });
+      saveData_(body.data || {});
+      return jsonOutput({ ok: true });
     }
 
     if (action === 'addItems') {
@@ -235,17 +204,11 @@ function doPost(e) {
       return jsonOutput({ ok: true, added: added });
     }
 
-    if (action === 'appendManualItem') {
-      const payload = (body && Object.keys(body).length) ? body : params;
-      const appended = appendManualItem_(payload);
-      return jsonOutput({ ok: true, appended: appended });
-    }
-
     if (!action) {
       return jsonOutput({ ok: false, error: 'Missing action' });
     }
 
-    return jsonOutput({ ok: false, error: 'Unsupported action. Use action=save, action=addItems, or action=appendManualItem' });
+    return jsonOutput({ ok: false, error: 'Unsupported action for app-sync. Use action=save or action=addItems' });
   } catch (err) {
     return jsonOutput({ ok: false, error: String(err) });
   }

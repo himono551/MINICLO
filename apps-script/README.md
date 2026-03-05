@@ -1,37 +1,45 @@
-# Apps Script連携手順
+# Apps Script連携手順（2プロジェクト分離）
 
-## 1. スプレッドシートにスクリプトを追加
+同じスプレッドシートに対して、Apps Scriptを2つに分けてデプロイします。
+
+- `apps-script/app-sync/Code.gs`: アプリ同期用（`load/save/addItems`）
+- `apps-script/capture/Code.gs`: 拡張機能 / iOSショートカット用（`appendManualItem` 専用）
+
+## 1. app-sync プロジェクトを作成
 1. 対象スプレッドシートを開く
 2. `拡張機能 > Apps Script`
-3. `apps-script/Code.gs` の内容を貼り付けて保存
+3. `apps-script/app-sync/Code.gs` を貼り付けて保存
+4. `デプロイ > 新しいデプロイ > ウェブアプリ`
+5. 実行ユーザー: `自分` / アクセス: `全員`
+6. デプロイしてURLを控える（`APP_SYNC_URL`）
 
-## 2. Webアプリとしてデプロイ
-1. `デプロイ > 新しいデプロイ`
-2. 種類: `ウェブアプリ`
-3. 実行ユーザー: `自分`
-4. アクセス: `全員`
-5. デプロイして `.../exec` URL をコピー
+## 2. capture プロジェクトを作成
+1. Apps Scriptを新規プロジェクトで作成（同じスプレッドシートに紐づける）
+2. `apps-script/capture/Code.gs` を貼り付けて保存
+3. `デプロイ > 新しいデプロイ > ウェブアプリ`
+4. 実行ユーザー: `自分` / アクセス: `全員`
+5. デプロイしてURLを控える（`CAPTURE_URL`）
 
-## 3. MiniClo側で設定
-1. 画面上部 `Apps Script URL` に `.../exec` を貼る
-2. `シートへ保存` を押してアップロード
-3. `シートから取得` で読み込み
+## 3. URLの使い分け
+- MiniCloアプリ本体の `Apps Script URL`: `APP_SYNC_URL`
+- Chrome拡張 / iOSショートカット: `CAPTURE_URL`
 
 ## API仕様
+
+### app-sync (`APP_SYNC_URL`)
 - GET `?action=load`
-  - レスポンス: `{ ok: true, data: { categories, inventoryItems, wishlistItems, budgetMonths, behaviorEvents } }`
-- POST JSON
-  - リクエスト: `{ action: "save", data: { ... } }`
-  - レスポンス: `{ ok: true }`
-- POST JSON (OCR一括追加)
-  - リクエスト: `{ action: "addItems", source, order, items, image_url, raw_text }`
-  - レスポンス: `{ ok: true, added: number }`
-- POST JSON (手動拡張追加)
-  - リクエスト:
-    - `action`: `"appendManualItem"`
-    - `name`: string (必須)
-    - `brand`, `type`, `category`, `category2`, `color`, `purchase_date`, `price`, `url`, `image_url`, `site`, `memo`, `raw_text`: string/number
-  - レスポンス: `{ ok: true, appended: 1 }`
+- GET `?action=debug`
+- POST `{ action: "save", data: {...} }`
+- POST `{ action: "addItems", ... }`
+
+`appendManualItem` は受け付けません。
+
+### capture (`CAPTURE_URL`)
+- GET `?action=debug`
+- POST `{ action: "appendManualItem", name, brand, url, ... }`
+- POST `{ action: "save", name, brand, url, ... }`（ショートカット互換）
+
+`load` / 全体 `save(data)` / `addItems` は受け付けません。
 
 ## `manualCaptures` シート列
 `appendManualItem` 実行時に、以下ヘッダーの `manualCaptures` シートを自動作成し1行追加します。

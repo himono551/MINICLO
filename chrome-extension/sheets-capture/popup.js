@@ -4,6 +4,7 @@ const FIELD_IDS = [
   'name',
   'brand',
   'type',
+  'item_status',
   'category',
   'category2',
   'color',
@@ -22,6 +23,43 @@ let persistTimer = null;
 
 function $(id) {
   return document.getElementById(id);
+}
+
+function normalizeTypeValue_(value) {
+  var raw = String(value || '').trim();
+  if (!raw) return '未分類';
+  if (/^product$/i.test(raw)) return '未分類';
+  if (/衣類|衣服|clothes?|fashion/i.test(raw)) return '衣服';
+  if (/コスメ|cosmetics?|makeup|beauty/i.test(raw)) return 'コスメ';
+  if (/ガジェット|家電|デバイス|電子|gadget|device|electronics?/i.test(raw)) return 'ガジェット';
+  if (/未分類|uncategorized|unknown|none|n\/a/i.test(raw)) return '未分類';
+  return '未分類';
+}
+
+function normalizeItemStatusValue_(value) {
+  var raw = String(value || '').trim();
+  if (!raw) return 'ほしい';
+  if (/^wish$/i.test(raw)) return 'ほしい';
+  if (/^owned$/i.test(raw)) return 'もってる';
+  if (/^disposed$/i.test(raw)) return '手放す';
+  if (/ほしい|欲しい|want|wish/i.test(raw)) return 'ほしい';
+  if (/もってる|持ってる|owned|have|own/i.test(raw)) return 'もってる';
+  if (/手放す|dispose|drop|discard/i.test(raw)) return '手放す';
+  return 'ほしい';
+}
+
+function updateImagePreview_() {
+  var input = $('image_url');
+  var preview = $('imagePreview');
+  if (!input || !preview) return;
+  var url = String(input.value || '').trim();
+  if (!url) {
+    preview.removeAttribute('src');
+    preview.classList.remove('is-visible');
+    return;
+  }
+  preview.src = url;
+  preview.classList.add('is-visible');
 }
 
 function setStatus(message, kind) {
@@ -86,6 +124,10 @@ function restorePopupState_(state) {
       $(id).value = fields[id] == null ? '' : String(fields[id]);
     }
   });
+  $('type').value = normalizeTypeValue_($('type').value);
+  $('item_status').value = normalizeItemStatusValue_($('item_status').value);
+  $('category').value = '未分類';
+  updateImagePreview_();
   if (state.status && state.status.text) {
     setStatus(String(state.status.text), String(state.status.kind || 'ok'));
   }
@@ -106,6 +148,10 @@ function fillForm(data) {
       $(id).value = data[id] == null ? '' : String(data[id]);
     }
   });
+  $('type').value = normalizeTypeValue_($('type').value);
+  $('item_status').value = normalizeItemStatusValue_($('item_status').value);
+  $('category').value = '未分類';
+  updateImagePreview_();
   schedulePersistPopupState_();
 }
 
@@ -233,6 +279,10 @@ async function submitToSheet() {
   }
 
   const payload = collectForm();
+  payload.type = normalizeTypeValue_(payload.type);
+  payload.status = normalizeItemStatusValue_(payload.item_status);
+  delete payload.item_status;
+  payload.category = '未分類';
   if (!payload.name) {
     setStatus('name は必須です', 'error');
     return;
@@ -311,6 +361,23 @@ async function init() {
     $(id).addEventListener('input', schedulePersistPopupState_);
     $(id).addEventListener('change', schedulePersistPopupState_);
   });
+  $('type').addEventListener('change', function() {
+    $('type').value = normalizeTypeValue_($('type').value);
+    schedulePersistPopupState_();
+  });
+  $('item_status').addEventListener('change', function() {
+    $('item_status').value = normalizeItemStatusValue_($('item_status').value);
+    schedulePersistPopupState_();
+  });
+  $('image_url').addEventListener('input', function() {
+    updateImagePreview_();
+    schedulePersistPopupState_();
+  });
+  $('image_url').addEventListener('change', updateImagePreview_);
+  $('type').value = normalizeTypeValue_($('type').value);
+  $('item_status').value = normalizeItemStatusValue_($('item_status').value);
+  $('category').value = '未分類';
+  updateImagePreview_();
 
   $('extractBtn').addEventListener('click', function() {
     extractCurrentPage();

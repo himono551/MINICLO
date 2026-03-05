@@ -14,16 +14,16 @@
       <p>持ちすぎを防ぐ、意思決定インベントリ</p>
       <nav class="side-nav" aria-label="画面切替">
         <button class="nav-btn active" data-tab="dashboard"><img class="btn-icon" src="./assets/icons/interface/icons8-graph-50.png" alt="" aria-hidden="true" />ダッシュボード</button>
-        <button class="nav-btn" data-tab="inventory"><img class="btn-icon" src="./assets/icons/interface/icons8-storage-50.png" alt="" aria-hidden="true" />在庫</button>
-        <div class="sub-nav" aria-label="在庫絞り込み">
+        <button class="nav-btn" data-tab="inventory"><img class="btn-icon" src="./assets/icons/interface/icons8-storage-50.png" alt="" aria-hidden="true" />アイテム</button>
+        <div class="sub-nav" aria-label="アイテム絞り込み">
           <button class="sub-nav-btn" data-scope="clothes"><img class="btn-icon sm" src="./assets/icons/clothes/icons8-t-shirt-1-50.png" alt="" aria-hidden="true" />衣服</button>
           <button class="sub-nav-btn" data-scope="cosmetics"><img class="btn-icon sm" src="./assets/icons/cosme/icons8-lipstick-50.png" alt="" aria-hidden="true" />コスメ</button>
           <button class="sub-nav-btn" data-scope="gadgets"><img class="btn-icon sm" src="./assets/icons/interface/icons8-gear-50.png" alt="" aria-hidden="true" />ガジェット</button>
           <button class="sub-nav-btn" data-scope="uncategorized"><img class="btn-icon sm" src="./assets/icons/interface/icons8-apps-50.png" alt="" aria-hidden="true" />未分類</button>
+          <button class="sub-nav-btn" data-scope="lettinggo"><img class="btn-icon sm" src="./assets/icons/interface/icons8-skip-50.png" alt="" aria-hidden="true" />手放す</button>
         </div>
         <button class="nav-btn" data-tab="ocr"><img class="btn-icon" src="./assets/icons/interface/icons8-picture-120.png" alt="" aria-hidden="true" />OCR取込</button>
         <button class="nav-btn" data-tab="wishlist"><img class="btn-icon" src="./assets/icons/interface/icons8-favorite-50.png" alt="" aria-hidden="true" />ウィッシュリスト</button>
-        <button class="nav-btn" data-tab="log"><img class="btn-icon" src="./assets/icons/interface/icons8-list-50.png" alt="" aria-hidden="true" />行動ログ</button>
         <button class="nav-btn" data-tab="trash"><img class="btn-icon" src="./assets/icons/interface/icons8-trash-can-50.png" alt="" aria-hidden="true" />ゴミ箱</button>
       </nav>
     </aside>
@@ -43,6 +43,11 @@
           <input id="scriptUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
           <button id="syncLoadBtn" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-download-50.png" alt="" aria-hidden="true" />シートから取得</button>
           <button id="syncSaveBtn" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-upload-50.png" alt="" aria-hidden="true" />シートへ保存</button>
+          <label class="inline-check">
+            <input id="autoSyncToggle" type="checkbox" />
+            <span>自動更新</span>
+          </label>
+          <button id="notifyPermissionBtn" class="action-btn ghost" type="button">通知を許可</button>
           <span id="syncStatus" class="sync-status">ローカル保存モード</span>
         </div>
       </section>
@@ -84,7 +89,7 @@
 
       <section class="panel tab-panel" data-panel="inventory">
         <div class="section-head">
-          <h2 id="inventorySectionTitle">在庫</h2>
+          <h2 id="inventorySectionTitle">アイテム</h2>
           <div class="inventory-actions">
             <button id="inventoryFieldsToggle" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-tune-50.png" alt="" aria-hidden="true" />カスタマイズ</button>
             <button id="inventorySortToggle" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-available-updates-50.png" alt="" aria-hidden="true" />並び替え</button>
@@ -197,55 +202,26 @@
       </section>
 
       <section class="panel tab-panel" data-panel="wishlist">
-        <h2>ウィッシュリスト</h2>
-        <form id="wishlistForm" class="inline-form">
-          <input name="name" type="text" placeholder="欲しいもの" required />
-          <select name="category" id="wishlistCategorySelect"></select>
-          <input name="price" type="number" min="0" step="1" placeholder="価格(任意)" />
-          <select name="priority">
-            <option value="1">Priority 1</option>
-            <option value="2" selected>Priority 2</option>
-            <option value="3">Priority 3</option>
-          </select>
-          <input name="needBy" type="date" />
-          <button type="submit" class="action-btn primary">追加</button>
-        </form>
+        <div class="section-head">
+          <h2>ほしいもの</h2>
+          <div class="inventory-actions">
+            <button id="wishlistAddOpen" class="action-btn primary" type="button"><img class="btn-icon sm invert" src="./assets/icons/interface/icons8-add-50.png" alt="" aria-hidden="true" />新規追加</button>
+            <button id="wishlistViewToggle" class="action-btn ghost" type="button"><img class="btn-icon sm" src="./assets/icons/interface/icons8-list-50.png" alt="" aria-hidden="true" />リスト</button>
+          </div>
+        </div>
 
-        <div class="table-wrap">
+        <div id="wishlistCategoryTabs" class="category-tabs" role="tablist" aria-label="ほしいものカテゴリ絞り込み"></div>
+
+        <div id="wishlistListWrap" class="table-wrap" hidden>
           <table>
             <thead>
-              <tr>
-                <th>名前</th>
-                <th>カテゴリ</th>
-                <th>価格</th>
-                <th>判定</th>
-                <th>候補重複</th>
-                <th>状態</th>
-                <th>操作</th>
-              </tr>
+              <tr id="wishlistHeadRow"></tr>
             </thead>
             <tbody id="wishlistRows"></tbody>
           </table>
         </div>
-      </section>
 
-      <section class="panel tab-panel" data-panel="log">
-        <h2>行動ログ</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>日付</th>
-                <th>種別</th>
-                <th>カテゴリ</th>
-                <th>名前</th>
-                <th>数量</th>
-                <th>金額</th>
-              </tr>
-            </thead>
-            <tbody id="eventRows"></tbody>
-          </table>
-        </div>
+        <div id="wishlistGallery" class="gallery-grid"></div>
       </section>
 
       <section class="panel tab-panel" data-panel="trash">
@@ -278,12 +254,19 @@
         <label>名前<input name="name" type="text" class="cell-input" placeholder="アイテム名" required /></label>
         <label>カテゴリ<select name="category" id="inventoryCategorySelect" class="cell-input"></select></label>
         <label>ブランド<input name="brand" type="text" class="cell-input" placeholder="ブランド" /></label>
-        <label>状態<input name="status" type="text" class="cell-input" placeholder="状態" /></label>
+        <label>状態
+          <select name="status" class="cell-input">
+            <option value="ほしい">ほしい</option>
+            <option value="もってる" selected>もってる</option>
+            <option value="手放す">手放す</option>
+          </select>
+        </label>
         <label>お気に入り<input name="fav" type="text" class="cell-input" placeholder="お気に入り" /></label>
         <label>色<input name="color" type="text" class="cell-input" placeholder="色" /></label>
         <label>季節<input name="season" type="text" class="cell-input" placeholder="季節" /></label>
         <label>タグ<input name="tag" type="text" class="cell-input" placeholder="タグ" /></label>
         <label>残量<input name="remaining" type="number" min="0" class="cell-input" placeholder="残量" /></label>
+        <label>メモ<input name="memo" type="text" class="cell-input" placeholder="メモ" /></label>
         <label>購入日<input name="purchase_date" type="date" class="cell-input" /></label>
         <label>価格<input name="price" type="number" min="0" class="cell-input" placeholder="価格" /></label>
         <label>容量<input name="capacity" type="text" class="cell-input" placeholder="容量" /></label>
@@ -333,11 +316,18 @@
           </label>
           <label>カテゴリ<select id="modalCategory" class="cell-input"></select></label>
           <label>タグ<input id="modalTag" type="text" class="cell-input" /></label>
-          <label>状態<input id="modalStatus" type="text" class="cell-input" /></label>
+          <label>状態
+            <select id="modalStatus" class="cell-input">
+              <option value="ほしい">ほしい</option>
+              <option value="もってる">もってる</option>
+              <option value="手放す">手放す</option>
+            </select>
+          </label>
           <label>お気に入り<input id="modalFav" type="text" class="cell-input" /></label>
           <label>色<input id="modalColor" type="text" class="cell-input" /></label>
           <label>季節<input id="modalSeason" type="text" class="cell-input" /></label>
           <label>残量<input id="modalRemaining" type="number" min="0" class="cell-input" /></label>
+          <label>メモ<input id="modalMemo" type="text" class="cell-input" /></label>
           <label>購入日<input id="modalPurchaseDate" type="date" class="cell-input" /></label>
           <label>価格<input id="modalPrice" type="number" min="0" class="cell-input" /></label>
           <label>容量<input id="modalCapacity" type="text" class="cell-input" /></label>

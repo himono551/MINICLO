@@ -37,6 +37,7 @@ const INVENTORY_DEFAULT_FIELDS = [
   { key: "season", label: "季節" },
   { key: "tag", label: "タグ" },
   { key: "remaining", label: "残量" },
+  { key: "memo", label: "メモ" },
   { key: "purchase_date", label: "購入日" },
   { key: "price", label: "価格" },
   { key: "capacity", label: "容量" },
@@ -45,11 +46,12 @@ const INVENTORY_DEFAULT_FIELDS = [
 ];
 
 const SCOPE_TITLE = {
-  all: "在庫",
+  all: "アイテム",
   clothes: "衣服",
   cosmetics: "コスメ",
   gadgets: "ガジェット",
   uncategorized: "未分類",
+  lettinggo: "手放す",
 };
 
 const INVENTORY_SORT_FIELDS = [
@@ -79,25 +81,26 @@ const INVENTORY_DEFAULT_SORT_RULES = [
 const OCR_CATEGORY_OPTIONS = ["服", "コスメ", "ガジェット", "その他"];
 const OCR_STATUS_OPTIONS = ["OWNED", "WISHLIST", "HISTORY", "DISPOSED"];
 const CATEGORY_TYPE_OPTIONS = ["衣服", "コスメ", "ガジェット", "未分類"];
+const ITEM_STATUS_OPTIONS = ["ほしい", "もってる", "手放す"];
 
 const CATEGORY_TABS_BY_SCOPE = {
   clothes: [
-    { name: "トップス", icon: "./assets/icons/clothes/icons8-t-shirt-1-50.png" },
-    { name: "ボトムス", icon: "./assets/icons/clothes/icons8-long-shorts-50.png" },
-    { name: "アウター", icon: "./assets/icons/clothes/icons8-coat-50.png" },
-    { name: "部屋着", icon: "./assets/icons/clothes/icons8-rubber-boots-50.png" },
-    { name: "下着", icon: "./assets/icons/clothes/icons8-bra-50.png" },
-    { name: "バッグ", icon: "./assets/icons/clothes/icons8-detective-hat-50.png" },
-    { name: "衣服その他", icon: "./assets/icons/clothes/icons8-diamond-ring-50.png" },
+    { name: "トップス" },
+    { name: "ボトムス" },
+    { name: "アウター" },
+    { name: "部屋着" },
+    { name: "下着" },
+    { name: "バッグ" },
+    { name: "衣服その他" },
   ],
   cosmetics: [
-    { name: "スキンケア", icon: "./assets/icons/cosme/icons8-shampoo-50.png" },
-    { name: "ベースメイク", icon: "./assets/icons/cosme/icons8-face-powder-50.png" },
-    { name: "ポイントメイク", icon: "./assets/icons/cosme/icons8-lipstick-50.png" },
-    { name: "コスメその他", icon: "./assets/icons/cosme/icons8-mirror-50.png" },
+    { name: "スキンケア" },
+    { name: "ベースメイク" },
+    { name: "ポイントメイク" },
+    { name: "コスメその他" },
   ],
   gadgets: [
-    { name: "ガジェットその他", icon: "./assets/icons/interface/icons8-gear-50.png" },
+    { name: "ガジェットその他" },
   ],
 };
 
@@ -134,6 +137,7 @@ const state = {
       cosmetics: "gallery",
       gadgets: "gallery",
       uncategorized: "gallery",
+      lettinggo: "list",
     },
     inventoryFieldsPanelOpen: false,
     inventorySortPanelOpen: false,
@@ -162,6 +166,13 @@ const state = {
     inventorySortAuto: true,
     inventorySortRules: clone(INVENTORY_DEFAULT_SORT_RULES),
     dashboardTypeFilter: "all",
+    wishlistView: "gallery",
+    wishlistCategoryFilter: "all",
+    autoSyncEnabled: false,
+    autoSyncIntervalSec: 60,
+    lastLoadedFingerprint: "",
+    notifyOnAutoSync: false,
+    lastSavedDataFingerprint: "",
     ocrSourceHint: "auto",
     ocrImageDataUrl: "",
     ocrStatusText: "画像を選択してください",
@@ -204,6 +215,7 @@ function monthFromDate(dateText) {
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  updateSyncSaveButtonState_();
 }
 
 function normalizeTypeLabel_(value) {
@@ -220,6 +232,16 @@ function normalizeCategoryType_(value) {
   const type = normalizeTypeLabel_(value);
   if (type === "衣服" || type === "コスメ" || type === "ガジェット" || type === "未分類") return type;
   return "衣服";
+}
+
+function normalizeItemStatus_(value, fallback = "もってる") {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  if (ITEM_STATUS_OPTIONS.includes(text)) return text;
+  if (/wish|approved|hold|want|ほしい|欲しい/i.test(text)) return "ほしい";
+  if (/owned|bought|own|持ってる|もってる|所持/i.test(text)) return "もってる";
+  if (/drop|dropped|dispose|disposed|hand.?off|手放す|処分/i.test(text)) return "手放す";
+  return fallback;
 }
 
 function inferCategoryTypeFromName_(categoryName) {
@@ -262,7 +284,7 @@ function normalizeInventoryItems() {
     const tag = String(item.tag || item.category2 || tags[3] || "");
     const rawCategoryName = String(item.category || getCategoryName(item.category_id) || "");
     const rawType = String(item.type || "");
-    const normalizedType = normalizeTypeLabel_(rawType);
+    const normalizedType = normalizeTypeLabel_(rawType) || inferCategoryTypeFromName_(rawCategoryName);
     const normalizedCategory = normalizeCategoryNameForType_(rawCategoryName, normalizedType);
     const categoryId = ensureLocalCategoryIdByName_(normalizedCategory, normalizedType);
     return {
@@ -272,13 +294,14 @@ function normalizeInventoryItems() {
       category: normalizedCategory,
       type: normalizedType,
       brand: String(item.brand || tags[0] || ""),
-      status: String(item.status || ""),
+      status: normalizeItemStatus_(item.status),
       fav: String(item.fav || ""),
       color: String(item.color || tags[1] || ""),
       season: String(item.season || tags[2] || ""),
       tag,
       category2: tag,
       remaining: String(item.remaining || item.qty || ""),
+      memo: String(item.memo || ""),
       purchase_date: String(item.purchase_date || ""),
       price: item.price == null || item.price === "" ? null : Number(item.price),
       capacity: String(item.capacity || ""),
@@ -310,8 +333,9 @@ function ensureInventoryUiDefaults() {
   if (!state.ui.inventoryViewByScope.cosmetics) state.ui.inventoryViewByScope.cosmetics = "gallery";
   if (!state.ui.inventoryViewByScope.gadgets) state.ui.inventoryViewByScope.gadgets = "gallery";
   if (!state.ui.inventoryViewByScope.uncategorized) state.ui.inventoryViewByScope.uncategorized = "gallery";
+  if (!state.ui.inventoryViewByScope.lettinggo) state.ui.inventoryViewByScope.lettinggo = "list";
   if (state.ui.inventoryScope === "other") state.ui.inventoryScope = "uncategorized";
-  if (!["all", "clothes", "cosmetics", "gadgets", "uncategorized"].includes(state.ui.inventoryScope || "")) {
+  if (!["all", "clothes", "cosmetics", "gadgets", "uncategorized", "lettinggo"].includes(state.ui.inventoryScope || "")) {
     state.ui.inventoryScope = "all";
   }
 
@@ -344,6 +368,13 @@ function ensureInventoryUiDefaults() {
   if (!Object.prototype.hasOwnProperty.call(state.ui, "ocrResult")) state.ui.ocrResult = null;
   if (!Object.prototype.hasOwnProperty.call(state.ui, "sidebarMenuOpen")) state.ui.sidebarMenuOpen = false;
   if (!Object.prototype.hasOwnProperty.call(state.ui, "dashboardTypeFilter")) state.ui.dashboardTypeFilter = "all";
+  if (!Object.prototype.hasOwnProperty.call(state.ui, "wishlistView")) state.ui.wishlistView = "gallery";
+  if (!Object.prototype.hasOwnProperty.call(state.ui, "wishlistCategoryFilter")) state.ui.wishlistCategoryFilter = "all";
+  if (!Object.prototype.hasOwnProperty.call(state.ui, "autoSyncEnabled")) state.ui.autoSyncEnabled = false;
+  if (!Object.prototype.hasOwnProperty.call(state.ui, "autoSyncIntervalSec")) state.ui.autoSyncIntervalSec = 60;
+  if (!Object.prototype.hasOwnProperty.call(state.ui, "lastLoadedFingerprint")) state.ui.lastLoadedFingerprint = "";
+  if (!Object.prototype.hasOwnProperty.call(state.ui, "notifyOnAutoSync")) state.ui.notifyOnAutoSync = false;
+  if (!Object.prototype.hasOwnProperty.call(state.ui, "lastSavedDataFingerprint")) state.ui.lastSavedDataFingerprint = "";
   if (Object.prototype.hasOwnProperty.call(state.ui.inventoryVisibleFields, "category2")
     && !Object.prototype.hasOwnProperty.call(state.ui.inventoryVisibleFields, "tag")) {
     state.ui.inventoryVisibleFields.tag = !!state.ui.inventoryVisibleFields.category2;
@@ -768,7 +799,7 @@ async function saveOcrResultToAppsScript_() {
         category: categoryName,
         type: typeName,
         brand: String(it.brand || "").trim(),
-        status: normalizedStatus.toLowerCase(),
+        status: normalizeItemStatus_(normalizedStatus, "もってる"),
         fav: "",
         color: "",
         season: "",
@@ -1063,6 +1094,9 @@ function restore() {
   if (!Object.prototype.hasOwnProperty.call(state.ui, "sidebarMenuOpen")) state.ui.sidebarMenuOpen = false;
     normalizeCategories_();
     normalizeInventoryItems();
+    if (!state.ui.lastSavedDataFingerprint) {
+      state.ui.lastSavedDataFingerprint = syncFingerprint_(exportSyncData());
+    }
     return true;
   } catch {
     return false;
@@ -1436,6 +1470,7 @@ function setTab(tab) {
 
 function matchInventoryScope(item, scope) {
   if (scope === "all") return true;
+  if (scope === "lettinggo") return normalizeItemStatus_(item?.status) === "手放す";
   const itemScope = scopeFromTypeLabel_(item?.type);
   if (scope === "uncategorized") return itemScope === "uncategorized";
   return itemScope === scope;
@@ -1476,14 +1511,71 @@ function withTimeout(promise, timeoutMs = SYNC_TIMEOUT_MS) {
   ]);
 }
 
-async function syncLoadFromAppsScript() {
+function syncFingerprint_(data) {
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return "";
+  }
+}
+
+function updateSyncSaveButtonState_() {
+  const btn = document.getElementById("syncSaveBtn");
+  if (!btn) return;
+  const baseline = String(state.ui.lastSavedDataFingerprint || "");
+  const current = syncFingerprint_(exportSyncData());
+  const dirty = baseline !== "" && current !== baseline;
+  btn.classList.toggle("attention", dirty);
+  btn.title = dirty ? "未保存の変更があります" : "";
+}
+
+function notifySheetUpdated_(message) {
+  if (!state.ui.notifyOnAutoSync) return;
+  if (!("Notification" in globalThis)) return;
+  if (Notification.permission !== "granted") return;
+  try {
+    new Notification("MiniClo", { body: message || "シートが更新されました" });
+  } catch {
+    // ignore
+  }
+}
+
+let autoSyncTimerId_ = null;
+let autoSyncInFlight_ = false;
+
+function stopAutoSync_() {
+  if (autoSyncTimerId_) {
+    clearInterval(autoSyncTimerId_);
+    autoSyncTimerId_ = null;
+  }
+}
+
+function startAutoSync_() {
+  stopAutoSync_();
+  if (!state.ui.autoSyncEnabled) return;
+  const intervalSec = Math.max(15, Number(state.ui.autoSyncIntervalSec || 60));
+  autoSyncTimerId_ = setInterval(async () => {
+    if (autoSyncInFlight_) return;
+    if (document.hidden) return;
+    if (!(state.ui.scriptUrl || "").trim()) return;
+    autoSyncInFlight_ = true;
+    try {
+      await syncLoadFromAppsScript({ silent: true, fromAuto: true });
+    } finally {
+      autoSyncInFlight_ = false;
+    }
+  }, intervalSec * 1000);
+}
+
+async function syncLoadFromAppsScript(options = {}) {
+  const { silent = false, fromAuto = false } = options;
   const url = (state.ui.scriptUrl || "").trim();
   if (!url) {
-    alert("Apps Script URL を入力してください。");
+    if (!silent) alert("Apps Script URL を入力してください。");
     return;
   }
 
-  setSyncStatus("シートから取得中...");
+  if (!silent) setSyncStatus("シートから取得中...");
 
   try {
     const ts = Date.now();
@@ -1492,13 +1584,25 @@ async function syncLoadFromAppsScript() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const payload = await res.json();
     const data = payload?.data ?? payload;
+    const incomingFingerprint = syncFingerprint_(data);
+    const hasChanged = incomingFingerprint && incomingFingerprint !== String(state.ui.lastLoadedFingerprint || "");
     importSyncData(data);
+    if (incomingFingerprint) state.ui.lastLoadedFingerprint = incomingFingerprint;
+    state.ui.lastSavedDataFingerprint = incomingFingerprint || syncFingerprint_(exportSyncData());
     persist();
-    setSyncStatus(`取得完了 ${new Date().toLocaleTimeString("ja-JP")}`);
+    if (!silent) setSyncStatus(`取得完了 ${new Date().toLocaleTimeString("ja-JP")}`);
+    if (fromAuto && hasChanged) {
+      setSyncStatus(`自動更新 ${new Date().toLocaleTimeString("ja-JP")}`);
+      notifySheetUpdated_("シート更新を反映しました");
+    }
     renderAll();
+    return { ok: true, changed: hasChanged };
   } catch (error) {
-    setSyncStatus("取得失敗");
-    alert(`シート取得に失敗しました: ${error.message}`);
+    if (!silent) {
+      setSyncStatus("取得失敗");
+      alert(`シート取得に失敗しました: ${error.message}`);
+    }
+    return { ok: false, changed: false };
   }
 }
 
@@ -1533,6 +1637,8 @@ async function syncSaveToAppsScript() {
     if (responsePayload && responsePayload.ok === false) {
       throw new Error(responsePayload.error || "Apps Scriptが保存エラーを返しました");
     }
+    state.ui.lastSavedDataFingerprint = syncFingerprint_(exportSyncData());
+    persist();
     setSyncStatus(`保存完了 ${new Date().toLocaleTimeString("ja-JP")}`);
   } catch (error) {
     // CORS制約下ではレスポンス読取に失敗することがあるため no-cors で再試行
@@ -1550,6 +1656,8 @@ async function syncSaveToAppsScript() {
             }),
           }),
         );
+        state.ui.lastSavedDataFingerprint = syncFingerprint_(exportSyncData());
+        persist();
         setSyncStatus(`保存送信完了 ${new Date().toLocaleTimeString("ja-JP")}`);
         return;
       } catch (_) {
@@ -1615,28 +1723,14 @@ function categoryFilterOptionsHtml(selected = "all") {
 }
 
 function categoryTabsForScope(scope) {
-  if (scope === "clothes") {
-    return [{ name: "全カテゴリ", value: "all", icon: "./assets/icons/interface/icons8-apps-50.png" }, ...CATEGORY_TABS_BY_SCOPE.clothes.map((x) => ({ ...x, value: x.name }))];
-  }
-  if (scope === "cosmetics") {
-    return [{ name: "全カテゴリ", value: "all", icon: "./assets/icons/interface/icons8-apps-50.png" }, ...CATEGORY_TABS_BY_SCOPE.cosmetics.map((x) => ({ ...x, value: x.name }))];
-  }
-  if (scope === "gadgets") {
-    return [{ name: "全カテゴリ", value: "all", icon: "./assets/icons/interface/icons8-apps-50.png" }, ...CATEGORY_TABS_BY_SCOPE.gadgets.map((x) => ({ ...x, value: x.name }))];
-  }
-  if (scope === "uncategorized") {
-    return [{ name: "全カテゴリ", value: "all", icon: "./assets/icons/interface/icons8-apps-50.png" }];
-  }
-  const merged = [...CATEGORY_TABS_BY_SCOPE.clothes, ...CATEGORY_TABS_BY_SCOPE.cosmetics, ...CATEGORY_TABS_BY_SCOPE.gadgets];
-  return [{ name: "全カテゴリ", value: "all", icon: "./assets/icons/interface/icons8-apps-50.png" }, ...merged.map((x) => ({ ...x, value: x.name }))];
-}
-
-function categoryIconByName(categoryName) {
-  const name = String(categoryName || "").trim();
-  if (!name || name === "-") return "./assets/icons/interface/icons8-apps-50.png";
-  const merged = [...CATEGORY_TABS_BY_SCOPE.clothes, ...CATEGORY_TABS_BY_SCOPE.cosmetics, ...CATEGORY_TABS_BY_SCOPE.gadgets];
-  const found = merged.find((x) => x.name === name);
-  return found?.icon || "./assets/icons/interface/icons8-apps-50.png";
+  const all = getSortedCategories();
+  let filtered = all;
+  if (scope === "clothes") filtered = all.filter((c) => normalizeCategoryType_(c.type) === "衣服");
+  else if (scope === "cosmetics") filtered = all.filter((c) => normalizeCategoryType_(c.type) === "コスメ");
+  else if (scope === "gadgets") filtered = all.filter((c) => normalizeCategoryType_(c.type) === "ガジェット");
+  else if (scope === "uncategorized") filtered = all.filter((c) => normalizeCategoryType_(c.type) === "未分類");
+  else if (scope === "lettinggo") filtered = all;
+  return [{ name: "全カテゴリ", value: "all" }, ...filtered.map((cat) => ({ name: cat.name, value: cat.name }))];
 }
 
 function ensureCategoryFilterForScope_() {
@@ -1660,7 +1754,6 @@ function renderInventoryCategoryTabs() {
         role="tab"
         aria-selected="${state.ui.inventoryCategoryFilter === tab.value ? "true" : "false"}"
         data-category-tab="${tab.value}">
-        <img src="${tab.icon}" alt="" aria-hidden="true" />
         <span>${tab.name}</span>
       </button>
     `)
@@ -1754,6 +1847,14 @@ function renderTopBar() {
 
   const scriptUrlInput = document.getElementById("scriptUrlInput");
   if (scriptUrlInput) scriptUrlInput.value = state.ui.scriptUrl || "";
+  const autoSyncToggle = document.getElementById("autoSyncToggle");
+  if (autoSyncToggle) autoSyncToggle.checked = !!state.ui.autoSyncEnabled;
+  const notifyBtn = document.getElementById("notifyPermissionBtn");
+  if (notifyBtn) {
+    const enabled = "Notification" in globalThis && Notification.permission === "granted";
+    notifyBtn.textContent = enabled ? "通知許可済み" : "通知を許可";
+  }
+  updateSyncSaveButtonState_();
   setSyncStatus(state.ui.syncStatus || "ローカル保存モード");
 }
 
@@ -1808,7 +1909,6 @@ function dashboardCategoryBreakdown() {
     name: row.cat.name,
     count: row.count,
     ratio: total > 0 ? row.count / total : 0,
-    icon: categoryIconByName(row.cat.name),
     color: DASHBOARD_DONUT_COLORS[idx % DASHBOARD_DONUT_COLORS.length],
   }));
   return { rows: result, total };
@@ -1900,7 +2000,6 @@ function renderDashboard() {
               <li class="dashboard-legend-row">
                 <div class="dashboard-legend-left">
                   <span class="dashboard-legend-dot" style="background:${row.color}"></span>
-                  <img src="${row.icon}" alt="" aria-hidden="true" />
                   <span>${row.name}</span>
                 </div>
                 <div class="dashboard-legend-right">${row.count} / ${Math.round(row.ratio * 100)}%</div>
@@ -1945,7 +2044,7 @@ function renderCategoryTable() {
 
 function renderInventory() {
   const sectionTitle = document.getElementById("inventorySectionTitle");
-  if (sectionTitle) sectionTitle.textContent = SCOPE_TITLE[state.ui.inventoryScope] || "在庫";
+  if (sectionTitle) sectionTitle.textContent = SCOPE_TITLE[state.ui.inventoryScope] || "アイテム";
 
   const select = document.getElementById("inventoryCategorySelect");
   const scopeType = inferTypeFromScope(state.ui.inventoryScope);
@@ -1969,6 +2068,11 @@ function renderInventory() {
 
   let rows = [...state.inventoryItems];
   rows = rows.filter((i) => matchInventoryScope(i, state.ui.inventoryScope));
+  if (state.ui.inventoryScope === "lettinggo") {
+    rows = rows.filter((i) => normalizeItemStatus_(i.status) === "手放す");
+  } else {
+    rows = rows.filter((i) => normalizeItemStatus_(i.status) === "もってる");
+  }
   if (state.ui.inventoryCategoryFilter !== "all") {
     rows = rows.filter((i) => String(i.category || getCategoryName(i.category_id)) === state.ui.inventoryCategoryFilter);
   }
@@ -2003,6 +2107,7 @@ function renderInventory() {
     }
     if (key === "tag") return item.tag ? `<span class="category2-chip">${item.tag}</span>` : "-";
     if (key === "qty") return item.qty ?? "-";
+    if (key === "status") return normalizeItemStatus_(item.status);
     return item[key] || "-";
   }
   function galleryMeta(item, key) {
@@ -2121,10 +2226,19 @@ function renderTrash() {
     });
 }
 
-function openInventoryAddModal() {
+function openInventoryAddModal(prefill = {}) {
   state.ui.inventoryAddModalOpen = true;
   const form = document.getElementById("inventoryForm");
-  if (form) form.reset();
+  if (form) {
+    form.reset();
+    const statusEl = form.querySelector('[name="status"]');
+    if (statusEl) statusEl.value = normalizeItemStatus_(prefill.status, "もってる");
+  }
+  const select = document.getElementById("inventoryCategorySelect");
+  if (select) {
+    const typeFilter = state.ui.tab === "inventory" ? (inferTypeFromScope(state.ui.inventoryScope) || "all") : "all";
+    select.innerHTML = categoryOptionsHtml("", typeFilter);
+  }
   renderInventoryAddModal();
 }
 
@@ -2237,13 +2351,14 @@ async function duplicateInventoryModalItem() {
     category: normalizedCategoryName,
     type: typeName,
     brand: String(draft.brand || "").trim(),
-    status: String(draft.status || "").trim(),
+    status: normalizeItemStatus_(draft.status),
     fav: String(draft.fav || "").trim(),
     color: String(draft.color || "").trim(),
     season: String(draft.season || "").trim(),
     tag: String(draft.tag || draft.category2 || "").trim(),
     category2: String(draft.tag || draft.category2 || "").trim(),
     remaining: String(draft.remaining || "").trim(),
+    memo: String(draft.memo || "").trim(),
     purchase_date: String(draft.purchase_date || "").trim(),
     price: draft.price === "" || draft.price == null ? null : Number(draft.price),
     capacity: String(draft.capacity || "").trim(),
@@ -2291,12 +2406,13 @@ function renderInventoryModal() {
     }
   }
   document.getElementById("modalBrand").value = draft.brand || "";
-  document.getElementById("modalStatus").value = draft.status || "";
+  document.getElementById("modalStatus").value = normalizeItemStatus_(draft.status);
   document.getElementById("modalFav").value = draft.fav || "";
   document.getElementById("modalColor").value = draft.color || "";
   document.getElementById("modalSeason").value = draft.season || "";
   document.getElementById("modalTag").value = draft.tag || draft.category2 || "";
   document.getElementById("modalRemaining").value = draft.remaining || "";
+  document.getElementById("modalMemo").value = draft.memo || "";
   document.getElementById("modalPurchaseDate").value = draft.purchase_date || "";
   document.getElementById("modalPrice").value = draft.price ?? "";
   document.getElementById("modalCapacity").value = draft.capacity || "";
@@ -2354,13 +2470,14 @@ async function saveInventoryModal(options = {}) {
   item.category = normalizedCategoryName;
   item.type = typeName;
   item.brand = String(draft.brand || "").trim();
-  item.status = String(draft.status || "").trim();
+  item.status = normalizeItemStatus_(draft.status);
   item.fav = String(draft.fav || "").trim();
   item.color = String(draft.color || "").trim();
   item.season = String(draft.season || "").trim();
   item.tag = String(draft.tag || draft.category2 || "").trim();
   item.category2 = item.tag;
   item.remaining = String(draft.remaining || "").trim();
+  item.memo = String(draft.memo || "").trim();
   item.purchase_date = String(draft.purchase_date || "").trim();
   item.price = draft.price === "" || draft.price == null ? null : Number(draft.price);
   item.capacity = String(draft.capacity || "").trim();
@@ -2401,56 +2518,133 @@ function formatDuplicateCandidates(ids) {
 }
 
 function renderWishlist() {
-  const select = document.getElementById("wishlistCategorySelect");
-  select.innerHTML = categoryOptionsHtml();
+  const tabs = categoryTabsForScope("all");
+  if (!tabs.some((t) => t.value === state.ui.wishlistCategoryFilter)) {
+    state.ui.wishlistCategoryFilter = "all";
+  }
+  const tabWrap = document.getElementById("wishlistCategoryTabs");
+  if (tabWrap) {
+    tabWrap.innerHTML = tabs
+      .map((tab) => `
+        <button
+          class="category-tab ${state.ui.wishlistCategoryFilter === tab.value ? "active" : ""}"
+          type="button"
+          role="tab"
+          aria-selected="${state.ui.wishlistCategoryFilter === tab.value ? "true" : "false"}"
+          data-wishlist-category-tab="${tab.value}">
+          <span>${tab.name}</span>
+        </button>
+      `)
+      .join("");
+  }
 
-  const { sorted, evals } = sortedWishlist(state.ui.month);
+  let rows = state.inventoryItems.filter((item) => normalizeItemStatus_(item.status) === "ほしい");
+  if (state.ui.wishlistCategoryFilter !== "all") {
+    rows = rows.filter((i) => String(i.category || getCategoryName(i.category_id)) === state.ui.wishlistCategoryFilter);
+  }
+  rows = sortInventoryRows_(rows);
+
   const tbody = document.getElementById("wishlistRows");
+  if (!tbody) return;
   tbody.innerHTML = "";
 
-  sorted.forEach((item) => {
-    const e = evals.get(item.id);
+  const headRow = document.getElementById("wishlistHeadRow");
+  const isVisible = state.ui.inventoryVisibleFields || {};
+  const baseColumns = [
+    { key: "image", label: "画像", enabled: true },
+    { key: "name", label: "名前", enabled: true },
+  ];
+  const dynamicColumns = getOrderedInventoryFieldDefs_().map((f) => ({
+    key: f.key,
+    label: f.label,
+    enabled: !!isVisible[f.key],
+  }));
+  const columns = [...baseColumns, ...dynamicColumns];
 
-    const budgetTag =
-      e.budget.status === "within"
-        ? badge("Budget: OK", "ok")
-        : e.budget.status === "over"
-          ? badge("Budget: Over", "warn")
-          : e.budget.status === "unknown_price"
-            ? badge("Budget: ?", "neutral")
-            : badge("Budget: -", "neutral");
+  function itemDisplay(item, key) {
+    if (key === "category") return item.category || getCategoryName(item.category_id);
+    if (key === "price") return item.price == null || Number.isNaN(Number(item.price)) ? "-" : yen(Number(item.price));
+    if (key === "purchase_date") return item.purchase_date || "-";
+    if (key === "url") {
+      const text = String(item.url || "").trim();
+      if (!text) return "-";
+      return `<a href="${text}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    }
+    if (key === "color") {
+      const colorHex = getColorHex(item.color);
+      return `<span class="color-dot-mini" style="background:${colorHex}" title="${item.color || "-"}"></span> ${item.color || "-"}`;
+    }
+    if (key === "tag") return item.tag ? `<span class="category2-chip">${item.tag}</span>` : "-";
+    if (key === "qty") return item.qty ?? "-";
+    if (key === "status") return normalizeItemStatus_(item.status);
+    return item[key] || "-";
+  }
 
-    const capTag =
-      e.capacity.status === "has_room"
-        ? badge("Cap: Room", "ok")
-        : e.capacity.status === "full_requires_swap"
-          ? badge("Cap: Full", "warn")
-          : badge("Cap: -", "neutral");
+  function galleryMeta(item, key) {
+    if (key === "color") {
+      const colorHex = getColorHex(item.color);
+      return `<p class="gallery-meta"><span class="color-dot-mini" style="background:${colorHex}" title="${item.color || "-"}"></span> ${item.color || "-"}</p>`;
+    }
+    if (key === "tag") {
+      return `<p class="gallery-meta">${item.tag ? `<span class="category2-chip">${item.tag}</span>` : "-"}</p>`;
+    }
+    return `<p class="gallery-meta">${itemDisplay(item, key)}</p>`;
+  }
 
-    const dupTag =
-      e.duplicate.status === "no_match"
-        ? badge("Dup: None", "ok")
-        : e.duplicate.status === "possible_duplicate"
-          ? badge("Dup: Check", "neutral")
-          : badge("Dup: Likely", "warn");
+  if (headRow) {
+    headRow.innerHTML = columns.filter((c) => c.enabled).map((c) => `<th>${c.label}</th>`).join("");
+  }
+
+  const gallery = document.getElementById("wishlistGallery");
+  if (gallery) gallery.innerHTML = "";
+
+  rows.forEach((item) => {
+    const imageSrc = coalesceImageSource(item);
+    const img = imageSrc
+      ? `<img class="thumb-xs" src="${imageSrc}" alt="" onerror="this.outerHTML='<span class=&quot;thumb-xs placeholder&quot; aria-hidden=&quot;true&quot;><img class=&quot;thumb-placeholder-icon&quot; src=&quot;./assets/icons/interface/icons8-picture-120.png&quot; alt=&quot;&quot; /></span>'" />`
+      : `<span class="thumb-xs placeholder" aria-hidden="true"><img class="thumb-placeholder-icon" src="./assets/icons/interface/icons8-picture-120.png" alt="" /></span>`;
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${item.name}</td>
-      <td>${getCategoryName(item.category_id)}</td>
-      <td>${item.price == null ? "-" : yen(item.price)}</td>
-      <td class="tags">${budgetTag}${capTag}${dupTag}</td>
-      <td>${formatDuplicateCandidates(e.duplicate.candidates)}</td>
-      <td>${item.status}</td>
-      <td>
-        <button class="action-btn ghost" data-kind="wish-approve" data-id="${item.id}">Approve</button>
-        <button class="action-btn ghost" data-kind="wish-hold" data-id="${item.id}">Hold</button>
-        <button class="action-btn ghost" data-kind="wish-drop" data-id="${item.id}">Drop</button>
-        <button class="action-btn primary" data-kind="wish-bought" data-id="${item.id}">Bought</button>
-      </td>
-    `;
+    tr.dataset.id = item.id;
+    const cells = [];
+    if (columns.find((c) => c.key === "image" && c.enabled)) cells.push(`<td>${img}</td>`);
+    if (columns.find((c) => c.key === "name" && c.enabled)) cells.push(`<td>${item.name}</td>`);
+    dynamicColumns.filter((c) => c.enabled).forEach((c) => {
+      cells.push(`<td>${itemDisplay(item, c.key)}</td>`);
+    });
+    tr.innerHTML = cells.join("");
     tbody.appendChild(tr);
+
+    if (!gallery) return;
+    const card = document.createElement("article");
+    card.className = "gallery-card";
+    card.dataset.id = item.id;
+    const imageClass = state.ui.inventoryImageFitMode === "fit" ? "gallery-image fit" : "gallery-image";
+    const imageNode = imageSrc
+      ? `<img class="${imageClass}" src="${imageSrc}" alt="" onerror="this.outerHTML='<div class=&quot;gallery-image empty&quot; aria-hidden=&quot;true&quot;><img class=&quot;gallery-empty-icon&quot; src=&quot;./assets/icons/interface/icons8-picture-120.png&quot; alt=&quot;&quot; /></div>'" />`
+      : `<div class="gallery-image empty" aria-hidden="true"><img class="gallery-empty-icon" src="./assets/icons/interface/icons8-picture-120.png" alt="" /></div>`;
+    const metas = dynamicColumns
+      .filter((c) => c.enabled)
+      .map((c) => galleryMeta(item, c.key))
+      .join("");
+    card.innerHTML = `
+      ${imageNode}
+      <p class="gallery-title">${item.name}</p>
+      ${metas}
+    `;
+    gallery.appendChild(card);
   });
+
+  const listWrap = document.getElementById("wishlistListWrap");
+  const viewBtn = document.getElementById("wishlistViewToggle");
+  const isGallery = state.ui.wishlistView !== "list";
+  if (listWrap) listWrap.hidden = isGallery;
+  if (gallery) gallery.hidden = !isGallery;
+  if (viewBtn) {
+    viewBtn.innerHTML = isGallery
+      ? `<img class="btn-icon sm" src="./assets/icons/interface/icons8-list-50.png" alt="" aria-hidden="true" />リスト`
+      : `<img class="btn-icon sm" src="./assets/icons/interface/icons8-four-squares-50.png" alt="" aria-hidden="true" />ギャラリー`;
+  }
 }
 
 function renderLog() {
@@ -2589,7 +2783,6 @@ function renderAll() {
   renderInventoryAddModal();
   renderInventoryModal();
   renderWishlist();
-  renderLog();
   renderTrash();
   renderOcr();
 }
@@ -2677,6 +2870,7 @@ function setupEvents() {
     state.ui.scriptUrl = String(e.target.value || "").trim();
     persist();
     setSyncStatus(state.ui.scriptUrl ? "同期先URL設定済み" : "ローカル保存モード");
+    startAutoSync_();
   });
 
   document.getElementById("syncLoadBtn").addEventListener("click", async () => {
@@ -2685,6 +2879,30 @@ function setupEvents() {
 
   document.getElementById("syncSaveBtn").addEventListener("click", async () => {
     await syncSaveToAppsScript();
+  });
+
+  document.getElementById("autoSyncToggle").addEventListener("change", (e) => {
+    state.ui.autoSyncEnabled = !!e.target.checked;
+    persist();
+    startAutoSync_();
+    setSyncStatus(state.ui.autoSyncEnabled ? "自動更新: ON" : "自動更新: OFF");
+  });
+
+  document.getElementById("notifyPermissionBtn").addEventListener("click", async () => {
+    if (!("Notification" in globalThis)) {
+      alert("このブラウザは通知に対応していません。");
+      return;
+    }
+    if (Notification.permission === "granted") {
+      state.ui.notifyOnAutoSync = true;
+      persist();
+      renderTopBar();
+      return;
+    }
+    const result = await Notification.requestPermission();
+    state.ui.notifyOnAutoSync = result === "granted";
+    persist();
+    renderTopBar();
   });
 
   document.getElementById("ocrSourceHint").addEventListener("change", (e) => {
@@ -3048,10 +3266,10 @@ function setupEvents() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     let imageUrl = String(fd.get("imageUrl") || "").trim();
-    const typeFromScope = inferTypeFromScope(state.ui.inventoryScope);
-    const typeName = state.ui.inventoryScope === "uncategorized" ? "未分類" : (normalizeTypeLabel_(typeFromScope) || "衣服");
     const rawCategoryId = String(fd.get("category") || "");
-    const rawCategoryName = getCategoryName(rawCategoryId);
+    const selectedCategory = getCategoryById(rawCategoryId);
+    const typeName = normalizeCategoryType_(selectedCategory?.type || inferTypeFromCategoryName(getCategoryName(rawCategoryId)) || "未分類");
+    const rawCategoryName = selectedCategory?.name || getCategoryName(rawCategoryId);
     const categoryName = normalizeCategoryNameForType_(rawCategoryName === "-" ? "" : rawCategoryName, typeName);
     const categoryId = ensureLocalCategoryIdByName_(categoryName, typeName);
 
@@ -3072,13 +3290,14 @@ function setupEvents() {
       category: categoryName,
       type: typeName,
       brand: String(fd.get("brand") || "").trim(),
-      status: String(fd.get("status") || "").trim(),
+      status: normalizeItemStatus_(fd.get("status"), "もってる"),
       fav: String(fd.get("fav") || "").trim(),
       color: String(fd.get("color") || "").trim(),
       season: String(fd.get("season") || "").trim(),
       tag: String(fd.get("tag") || "").trim(),
       category2: String(fd.get("tag") || "").trim(),
       remaining: String(fd.get("remaining") || "").trim(),
+      memo: String(fd.get("memo") || "").trim(),
       purchase_date: String(fd.get("purchase_date") || "").trim(),
       price: fd.get("price") === "" ? null : Number(fd.get("price")),
       capacity: String(fd.get("capacity") || "").trim(),
@@ -3241,9 +3460,9 @@ function setupEvents() {
     if (!state.ui.inventoryModalDraft) return;
     state.ui.inventoryModalDraft.brand = e.target.value;
   });
-  document.getElementById("modalStatus").addEventListener("input", (e) => {
+  document.getElementById("modalStatus").addEventListener("change", (e) => {
     if (!state.ui.inventoryModalDraft) return;
-    state.ui.inventoryModalDraft.status = e.target.value;
+    state.ui.inventoryModalDraft.status = normalizeItemStatus_(e.target.value);
   });
   document.getElementById("modalFav").addEventListener("input", (e) => {
     if (!state.ui.inventoryModalDraft) return;
@@ -3266,6 +3485,10 @@ function setupEvents() {
   document.getElementById("modalRemaining").addEventListener("input", (e) => {
     if (!state.ui.inventoryModalDraft) return;
     state.ui.inventoryModalDraft.remaining = e.target.value;
+  });
+  document.getElementById("modalMemo").addEventListener("input", (e) => {
+    if (!state.ui.inventoryModalDraft) return;
+    state.ui.inventoryModalDraft.memo = e.target.value;
   });
   document.getElementById("modalPurchaseDate").addEventListener("input", (e) => {
     if (!state.ui.inventoryModalDraft) return;
@@ -3318,43 +3541,34 @@ function setupEvents() {
     }
   });
 
-  document.getElementById("wishlistForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+  document.getElementById("wishlistAddOpen").addEventListener("click", () => {
+    openInventoryAddModal({ status: "ほしい" });
+  });
 
-    state.wishlistItems.push({
-      id: uuid(),
-      name: String(fd.get("name") || "").trim(),
-      category_id: String(fd.get("category") || ""),
-      price: fd.get("price") === "" ? null : Number(fd.get("price")),
-      priority: Number(fd.get("priority") || 2),
-      need_by: String(fd.get("needBy") || "") || null,
-      notes: null,
-      status: "wish",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-
-    e.currentTarget.reset();
+  document.getElementById("wishlistViewToggle").addEventListener("click", () => {
+    state.ui.wishlistView = state.ui.wishlistView === "list" ? "gallery" : "list";
     persist();
-    renderAll();
+    renderWishlist();
+  });
+
+  document.getElementById("wishlistCategoryTabs").addEventListener("click", (e) => {
+    const btn = e.target instanceof HTMLElement ? e.target.closest("[data-wishlist-category-tab]") : null;
+    if (!btn) return;
+    state.ui.wishlistCategoryFilter = btn.dataset.wishlistCategoryTab || "all";
+    persist();
+    renderWishlist();
   });
 
   document.getElementById("wishlistRows").addEventListener("click", (e) => {
-    const t = e.target;
-    if (!(t instanceof HTMLButtonElement)) return;
-    const id = t.dataset.id;
-    const wish = state.wishlistItems.find((w) => w.id === id);
-    if (!wish) return;
+    const row = e.target instanceof HTMLElement ? e.target.closest("tr[data-id]") : null;
+    if (!row) return;
+    openInventoryModal(row.dataset.id);
+  });
 
-    if (t.dataset.kind === "wish-approve") wish.status = "approved";
-    if (t.dataset.kind === "wish-hold") wish.status = "hold";
-    if (t.dataset.kind === "wish-drop") wish.status = "dropped";
-    if (t.dataset.kind === "wish-bought") handleWishBought(id);
-
-    wish.updated_at = new Date().toISOString();
-    persist();
-    renderAll();
+  document.getElementById("wishlistGallery").addEventListener("click", (e) => {
+    const card = e.target instanceof HTMLElement ? e.target.closest(".gallery-card[data-id]") : null;
+    if (!card) return;
+    openInventoryModal(card.dataset.id);
   });
 }
 
@@ -3365,9 +3579,14 @@ function boot() {
   loadContextFilter_();
   loadContextCustomize_();
   state.ui.inventoryFieldsPanelOpen = false;
+  if (state.ui.tab === "log") state.ui.tab = "dashboard";
+  if (!state.ui.lastSavedDataFingerprint) {
+    state.ui.lastSavedDataFingerprint = syncFingerprint_(exportSyncData());
+  }
   setupEvents();
   setTab(state.ui.tab);
   applySidebarMenuState_();
+  startAutoSync_();
   renderAll();
 }
 

@@ -135,7 +135,7 @@ const WISHLIST_STATUSES = ['wish', 'approved', 'hold', 'dropped', 'bought'];
 // 既存の手入力シートにも保存結果を反映する
 const WRITE_BACK_LEGACY_SHEET = true;
 // 必要なら対象スプレッドシートIDを固定する（通常は空推奨）
-const TARGET_SPREADSHEET_ID = '';
+const TARGET_SPREADSHEET_ID = '1dAhsc6reDgVQnF5KyVybugJCIYhnXi051KH7D8TesjU';
 
 function doGet(e) {
   const action = e && e.parameter ? e.parameter.action : '';
@@ -154,16 +154,7 @@ function doGet(e) {
     }
   }
 
-  if (action !== 'load') {
-    return jsonOutput({ ok: false, error: 'Unsupported action. Use ?action=load or ?action=debug' });
-  }
-
-  try {
-    const data = loadData_();
-    return jsonOutput({ ok: true, data: data });
-  } catch (err) {
-    return jsonOutput({ ok: false, error: String(err) });
-  }
+  return jsonOutput({ ok: false, error: 'Unsupported action for capture. Use ?action=debug' });
 }
 
 
@@ -195,13 +186,7 @@ function doPost(e) {
       return '';
     }
 
-    if (action === 'save') {
-      // アプリ本体の全体保存: { action: "save", data: {...} }
-      if (body.data && typeof body.data === 'object') {
-        saveData_(body.data || {});
-        return jsonOutput({ ok: true });
-      }
-
+    if (action === 'save' || action === 'appendManualItem') {
       // iOSショートカット互換: { action: "save", name, brand, url, ... }
       const shortcutPayload = {
         name: String(pick_('name') || '').trim(),
@@ -226,26 +211,18 @@ function doPost(e) {
         });
       }
       const appended = appendManualItem_(shortcutPayload);
-      return jsonOutput({ ok: true, appended: appended, mode: 'shortcut_save' });
-    }
-
-    if (action === 'addItems') {
-      const payload = (body && Object.keys(body).length) ? body : params;
-      const added = appendOcrItems_(payload);
-      return jsonOutput({ ok: true, added: added });
-    }
-
-    if (action === 'appendManualItem') {
-      const payload = (body && Object.keys(body).length) ? body : params;
-      const appended = appendManualItem_(payload);
-      return jsonOutput({ ok: true, appended: appended });
+      return jsonOutput({
+        ok: true,
+        appended: appended,
+        mode: action === 'save' ? 'shortcut_save' : 'append_manual'
+      });
     }
 
     if (!action) {
       return jsonOutput({ ok: false, error: 'Missing action' });
     }
 
-    return jsonOutput({ ok: false, error: 'Unsupported action. Use action=save, action=addItems, or action=appendManualItem' });
+    return jsonOutput({ ok: false, error: 'Unsupported action for capture. Use action=appendManualItem or action=save (shortcut compatibility)' });
   } catch (err) {
     return jsonOutput({ ok: false, error: String(err) });
   }

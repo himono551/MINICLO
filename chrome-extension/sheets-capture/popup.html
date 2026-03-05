@@ -29,23 +29,29 @@
       <div class="row two">
         <label>
           type
-          <input id="type" type="text" />
+          <select id="type">
+            <option value="未分類" selected>未分類</option>
+            <option value="衣服">衣服</option>
+            <option value="コスメ">コスメ</option>
+            <option value="ガジェット">ガジェット</option>
+          </select>
         </label>
         <label>
-          category
-          <input id="category" type="text" />
+          status
+          <select id="item_status">
+            <option value="ほしい" selected>ほしい</option>
+            <option value="もってる">もってる</option>
+            <option value="手放す">手放す</option>
+          </select>
         </label>
       </div>
 
       <div class="row two">
         <label>
-          tag (category2)
-          <input id="category2" type="text" />
-        </label>
-        <label>
           color
           <input id="color" type="text" />
         </label>
+        <div></div>
       </div>
 
       <div class="row two">
@@ -60,25 +66,26 @@
       </div>
 
       <label>
-        url
-        <input id="url" type="url" />
-      </label>
-      <label>
         image_url
         <input id="image_url" type="url" />
       </label>
-      <label>
-        site
-        <input id="site" type="text" />
-      </label>
+      <div class="image-preview-wrap" aria-label="image preview">
+        <div class="image-preview-title">Content Image</div>
+        <div class="image-preview-grid">
+          <img id="imagePreview" class="image-preview" alt="preview" />
+          <div class="image-preview-placeholder" aria-hidden="true">+</div>
+        </div>
+      </div>
       <label>
         memo
         <textarea id="memo" rows="2"></textarea>
       </label>
-      <label>
-        raw_text
-        <textarea id="raw_text" rows="2"></textarea>
-      </label>
+
+      <input id="category" type="hidden" value="未分類" />
+      <input id="category2" type="hidden" value="" />
+      <input id="url" type="hidden" value="" />
+      <input id="site" type="hidden" value="" />
+      <input id="raw_text" type="hidden" value="" />
 
       <div class="actions">
         <button id="extractBtn" type="button" class="secondary">現在ページから抽出</button>
